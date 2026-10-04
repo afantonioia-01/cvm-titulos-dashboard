@@ -31,15 +31,40 @@ def classificar_operacao(row):
     tp = str(row.get('TP_APLIC', '')).upper()
     return 'Compromissada' if 'COMPROMISSAD' in tp else 'Definitiva'
 
-def classificar_conglomerado(nome):
-    n = str(nome).upper()
-    if any(b in n for b in ['ITAU', 'ITAÚ', 'ITAUVEST', 'KINEA']): return 'Itaú Unibanco'
-    if any(b in n for b in ['BRADESCO', 'BRAM']): return 'Bradesco'
-    if any(b in n for b in ['BANCO DO BRASIL', 'BB GESTAO', 'BB ']): return 'Banco do Brasil'
-    if 'SANTANDER' in n: return 'Santander'
-    if 'CAIXA' in n: return 'Caixa Econômica'
-    if 'BTG' in n: return 'BTG Pactual'
-    if 'SAFRA' in n: return 'Safra'
+def classificar_conglomerado(row_ou_nome):
+    """
+    Identifica o conglomerado bancário auditando Gestor, Administrador e Razão Social.
+    Reconhece subsidiárias e seguradoras como Brasilprev (BB), Kinea (Itaú), BRAM (Bradesco), etc.
+    """
+    if isinstance(row_ou_nome, dict) or isinstance(row_ou_nome, pd.Series):
+        texto = f"{row_ou_nome.get('Gestor', '')} {row_ou_nome.get('Administrador', '')} {row_ou_nome.get('Denominacao_Social', '')} {row_ou_nome.get('DENOM_SOCIAL', '')}"
+    else:
+        texto = str(row_ou_nome)
+    
+    n = texto.upper()
+    
+    # Banco do Brasil & Brasilprev
+    if any(b in n for b in ['BANCO DO BRASIL', 'BB GESTAO', 'BB GESTÃO', 'BB DTVM', 'BB ', 'BRASILPREV', 'BB-']):
+        return 'Banco do Brasil'
+    # Itaú Unibanco & Kinea
+    if any(b in n for b in ['ITAU', 'ITAÚ', 'ITAUVEST', 'KINEA', 'UNIBANCO', 'INTRAG']):
+        return 'Itaú Unibanco'
+    # Bradesco & BRAM
+    if any(b in n for b in ['BRADESCO', 'BRAM', 'BEM DTVM', 'BRADESCO ASSET', 'BRADESCO SEGUROS']):
+        return 'Bradesco'
+    # Santander
+    if any(b in n for b in ['SANTANDER', 'SANVAL']):
+        return 'Santander'
+    # Caixa Econômica Federal
+    if any(b in n for b in ['CAIXA ECONOMICA', 'CAIXA ECONÔMICA', 'CAIXA DTVM', 'CEF']):
+        return 'Caixa Econômica'
+    # BTG Pactual
+    if any(b in n for b in ['BTG', 'BTG PACTUAL']):
+        return 'BTG Pactual'
+    # Safra
+    if any(b in n for b in ['SAFRA', 'J. SAFRA']):
+        return 'Safra'
+        
     return 'Independentes'
 
 def processar_arquivos_cvm(pasta_origem: str = PASTA_DADOS) -> pd.DataFrame:
@@ -119,7 +144,7 @@ def processar_arquivos_cvm(pasta_origem: str = PASTA_DADOS) -> pd.DataFrame:
     else:
         df_consolidado["Denominacao_Social"] = df_consolidado["DENOM_SOCIAL"]
 
-    df_consolidado["CONGLOMERADO"] = df_consolidado["Denominacao_Social"].apply(classificar_conglomerado)
+    df_consolidado["CONGLOMERADO"] = df_consolidado.apply(classificar_conglomerado, axis=1)
 
     df_consolidado["ID_PAPEL"] = (
         df_consolidado["TP_TITPUB"].astype(str) + " (" +
