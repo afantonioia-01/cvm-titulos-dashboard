@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from pdf_export import gerar_relatorio_pdf_fundo, gerar_relatorio_pdf_titulo
+from pdf_export import gerar_relatorio_pdf_fundo, gerar_relatorio_pdf_titulo, gerar_relatorio_pdf_conglomerado
 
 # ------------------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT
@@ -185,8 +185,9 @@ if filtro_conglomerado != "Todos":
 # ------------------------------------------------------------------------------
 # 4. ABAS PRINCIPAIS DO DASHBOARD
 # ------------------------------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab_cong, tab2, tab3, tab4, tab5 = st.tabs([
     "🏛️ Raio-X por Fundo",
+    "🏢 Visão por Conglomerado",
     "🎯 Consulta Inversa (por Título)",
     "⚖️ Comparador Temporal (Mês A vs B)",
     "🏦 Tesourarias & Bancos",
@@ -293,6 +294,189 @@ with tab1:
         df_tab_view["VL_MERC_POS_FINAL"] = df_tab_view["VL_MERC_POS_FINAL"].apply(lambda v: f"R$ {v:,.2f}")
         df_tab_view["PR_SOBRE_PL"] = df_tab_view["PR_SOBRE_PL"].apply(lambda v: f"{v:.2f}%")
         st.dataframe(df_tab_view, use_container_width=True)
+
+# ==============================================================================
+# ABA CONGLOMERADO: VISÃO CONSOLIDADA DE CONGLOMERADO
+# ==============================================================================
+with tab_cong:
+    st.subheader("🏢 Visão Consolidada por Conglomerado Financeiro")
+    st.caption("Análise agregada de todos os fundos sob gestão do grupo: AuM consolidado, divisão definitivas vs compromissadas, ranking de fundos e títulos.")
+    
+    lista_conglom_tab = ["Itaú Unibanco", "Banco do Brasil", "Bradesco", "BTG Pactual", "Santander", "Caixa Econômica", "Safra", "Independentes"]
+    conglom_escolhido = st.selectbox("Selecione o Conglomerado Financeiro:", lista_conglom_tab, index=0, key="sel_conglom_tab")
+    
+    # Filtrar dados do conglomerado na competência ativa
+    df_cg_mes = df_all[(df_all["CONGLOMERADO"] == conglom_escolhido) & (df_all["DT_COMPTC"] == comp_selecionada)].copy()
+    
+    if df_cg_mes.empty:
+        st.info(f"Nenhuma posição registrada para o conglomerado {conglom_escolhido} na competência {comp_selecionada}.")
+    else:
+        # Fundos únicos e AuM consolidado
+        fundos_cg = df_cg_mes[["CNPJ_CLEAN", "Denominacao_Social", "VL_PATRIM_LIQ"]].drop_duplicates("CNPJ_CLEAN")
+        pl_consolidado = fundos_cg["VL_PATRIM_LIQ"].sum()
+        
+        tot_titulos_cg = df_cg_mes["VL_MERC_POS_FINAL"].sum()
+        tot_def_cg = df_cg_mes[df_cg_mes["TIPO_OPERACAO"] == "Definitiva"]["VL_MERC_POS_FINAL"].sum()
+        tot_comp_cg = df_cg_mes[df_cg_mes["TIPO_OPERACAO"] == "Compromissada"]["VL_MERC_POS_FINAL"].sum()
+        
+        pct_tit_pl_cg = (tot_titulos_cg / pl_consolidado * 100) if pl_consolidado > 0 else 0
+        pct_def_cg = (tot_def_cg / pl_consolidado * 100) if pl_consolidado > 0 else 0
+        pct_comp_cg = (tot_comp_cg / pl_consolidado * 100) if pl_consolidado > 0 else 0
+        
+        # 5 Cards de Indicadores
+        cg1, cg2, cg3, cg4, cg5 = st.columns(5)
+        cg1.markdown(f"""
+        <div class="metric-card-box">
+            <div class="metric-label-clean">AuM Consolidado (PL)</div>
+            <div class="metric-val-clean">R$ {pl_consolidado:,.2f}</div>
+            <div class="metric-sub-clean">R$ {pl_consolidado/1e9:.2f} Bi sob gestão</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        cg2.markdown(f"""
+        <div class="metric-card-box">
+            <div class="metric-label-clean">Total Títulos Públicos</div>
+            <div class="metric-val-clean" style="color: #0284c7;">R$ {tot_titulos_cg:,.2f}</div>
+            <div class="metric-sub-clean">{pct_tit_pl_cg:.1f}% do PL consolidado</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        cg3.markdown(f"""
+        <div class="metric-card-box">
+            <div class="metric-label-clean" style="color: #16a34a;">Definitivas (Risco)</div>
+            <div class="metric-val-clean">R$ {tot_def_cg:,.2f}</div>
+            <div class="metric-sub-clean">{pct_def_cg:.1f}% carteira proprietária</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        cg4.markdown(f"""
+        <div class="metric-card-box">
+            <div class="metric-label-clean" style="color: #d97706;">Compromissadas (Caixa)</div>
+            <div class="metric-val-clean">R$ {tot_comp_cg:,.2f}</div>
+            <div class="metric-sub-clean">{pct_comp_cg:.1f}% em colateral/liquidez</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        cg5.markdown(f"""
+        <div class="metric-card-box">
+            <div class="metric-label-clean">Grade de Fundos</div>
+            <div class="metric-val-clean">{len(fundos_cg)} fundos</div>
+            <div class="metric-sub-clean">{len(df_cg_mes):,} posições ativas</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        
+        # Gráficos da Visão Consolidada
+        col_cgg1, col_cgg2 = st.columns(2)
+        with col_cgg1:
+            st.markdown("##### 🥧 Alocação Consolidada por Tipo de Título")
+            por_tipo_cg = df_cg_mes.groupby("TP_TITPUB")["VL_MERC_POS_FINAL"].sum().reset_index()
+            fig_pie_cg = px.pie(
+                por_tipo_cg,
+                names="TP_TITPUB",
+                values="VL_MERC_POS_FINAL",
+                hole=0.45,
+                color_discrete_sequence=["#0284c7", "#10b981", "#f59e0b", "#8b5cf6", "#64748b"]
+            )
+            fig_pie_cg.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280)
+            st.plotly_chart(fig_pie_cg, use_container_width=True, config={'displayModeBar': False})
+            
+        with col_cgg2:
+            st.markdown("##### 📊 Curva de Vencimentos Consolidada (Duration)")
+            if "ANO_VENC" not in df_cg_mes.columns and "DT_VENC" in df_cg_mes.columns:
+                df_cg_mes["ANO_VENC"] = pd.to_datetime(df_cg_mes["DT_VENC"], errors="coerce").dt.year.fillna(9999).astype(int).astype(str)
+            
+            por_venc_cg = df_cg_mes.groupby("ANO_VENC")["VL_MERC_POS_FINAL"].sum().reset_index()
+            por_venc_cg["VL_BILHOES"] = por_venc_cg["VL_MERC_POS_FINAL"] / 1e9
+            fig_bar_cg = px.bar(
+                por_venc_cg,
+                x="ANO_VENC",
+                y="VL_BILHOES",
+                labels={"ANO_VENC": "Ano de Vencimento", "VL_BILHOES": "R$ Bilhões"},
+                color_discrete_sequence=["#4f46e5"]
+            )
+            fig_bar_cg.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280)
+            st.plotly_chart(fig_bar_cg, use_container_width=True, config={'displayModeBar': False})
+            
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        
+        # Tabela 1: Ranking dos Fundos do Conglomerado
+        st.markdown(f"##### 🏛️ Grade de Fundos do {conglom_escolhido} ({len(fundos_cg)} fundos)")
+        st.caption("Abertura individual do Patrimônio Líquido, Total de Títulos Públicos, Definitivas e Compromissadas")
+        
+        filtro_txt_cg = st.text_input("Filtrar fundos por nome ou CNPJ:", "", key="busca_fundo_cg")
+        
+        resumo_fundos = []
+        for _, f_row in fundos_cg.iterrows():
+            c_cnpj = str(f_row["CNPJ_CLEAN"])
+            c_nome = f_row["Denominacao_Social"]
+            c_pl = f_row["VL_PATRIM_LIQ"]
+            
+            f_pos = df_cg_mes[df_cg_mes["CNPJ_CLEAN"] == c_cnpj]
+            f_tit = f_pos["VL_MERC_POS_FINAL"].sum()
+            f_def = f_pos[f_pos["TIPO_OPERACAO"] == "Definitiva"]["VL_MERC_POS_FINAL"].sum()
+            f_comp = f_pos[f_pos["TIPO_OPERACAO"] == "Compromissada"]["VL_MERC_POS_FINAL"].sum()
+            f_pct = (f_tit / c_pl * 100) if c_pl > 0 else 0
+            
+            cnpj_fmt = f"{c_cnpj[:2]}.{c_cnpj[2:5]}.{c_cnpj[5:8]}/{c_cnpj[8:12]}-{c_cnpj[12:]}" if len(c_cnpj)==14 else c_cnpj
+            resumo_fundos.append({
+                "Denominacao_Social": c_nome,
+                "CNPJ": cnpj_fmt,
+                "VL_PATRIM_LIQ": c_pl,
+                "TOTAL_TITULOS": f_tit,
+                "DEFINITIVAS": f_def,
+                "COMPROMISSADAS": f_comp,
+                "PCT_PL": f_pct
+            })
+            
+        df_rf = pd.DataFrame(resumo_fundos).sort_values("VL_PATRIM_LIQ", ascending=False)
+        
+        if filtro_txt_cg:
+            df_rf = df_rf[df_rf["Denominacao_Social"].str.contains(filtro_txt_cg, case=False, na=False) | df_rf["CNPJ"].str.contains(filtro_txt_cg, case=False, na=False)]
+            
+        df_rf_view = df_rf.copy()
+        df_rf_view["VL_PATRIM_LIQ"] = df_rf_view["VL_PATRIM_LIQ"].apply(lambda v: f"R$ {v:,.2f}")
+        df_rf_view["TOTAL_TITULOS"] = df_rf_view["TOTAL_TITULOS"].apply(lambda v: f"R$ {v:,.2f}")
+        df_rf_view["DEFINITIVAS"] = df_rf_view["DEFINITIVAS"].apply(lambda v: f"R$ {v:,.2f}")
+        df_rf_view["COMPROMISSADAS"] = df_rf_view["COMPROMISSADAS"].apply(lambda v: f"R$ {v:,.2f}")
+        df_rf_view["PCT_PL"] = df_rf_view["PCT_PL"].apply(lambda v: f"{v:.2f}%")
+        
+        df_rf_view.rename(columns={
+            "Denominacao_Social": "Fundo de Investimento",
+            "VL_PATRIM_LIQ": "Patrimônio Líquido",
+            "TOTAL_TITULOS": "Total Títulos",
+            "DEFINITIVAS": "Definitivas (Risco)",
+            "COMPROMISSADAS": "Compromissadas (Caixa)",
+            "PCT_PL": "% no PL"
+        }, inplace=True)
+        st.dataframe(df_rf_view, use_container_width=True)
+        
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        
+        # Tabela 2: Principais Títulos Públicos Detidos pelo Conglomerado
+        st.markdown(f"##### 🎯 Principais Títulos Públicos Custodiados pelo {conglom_escolhido}")
+        st.caption("Consolidação dos papéis mais representativos no portfólio de todos os fundos do conglomerado")
+        
+        titulos_cg = df_cg_mes.groupby(["TP_TITPUB", "CD_SELIC", "CD_ISIN", "DT_VENC"]).agg(
+            QT_TOTAL=("QT_POS_FINAL", "sum"),
+            VL_TOTAL=("VL_MERC_POS_FINAL", "sum"),
+            QTD_FUNDOS=("CNPJ_CLEAN", "nunique")
+        ).reset_index().sort_values("VL_TOTAL", ascending=False)
+        
+        titulos_cg_view = titulos_cg.copy()
+        titulos_cg_view["QT_TOTAL"] = titulos_cg_view["QT_TOTAL"].apply(lambda v: f"{v:,.0f}")
+        titulos_cg_view["VL_TOTAL"] = titulos_cg_view["VL_TOTAL"].apply(lambda v: f"R$ {v:,.2f}")
+        titulos_cg_view.rename(columns={
+            "TP_TITPUB": "Tipo",
+            "CD_SELIC": "Código SELIC",
+            "CD_ISIN": "ISIN",
+            "DT_VENC": "Vencimento",
+            "QT_TOTAL": "Quantidade Total",
+            "VL_TOTAL": "Volume Consolidado (R$)",
+            "QTD_FUNDOS": "Qtd de Fundos Detentores"
+        }, inplace=True)
+        st.dataframe(titulos_cg_view, use_container_width=True)
 
 # ==============================================================================
 # ABA 2: CONSULTA INVERSA (POR TÍTULO PÚBLICO)
@@ -739,7 +923,7 @@ with tab5:
     st.subheader("📄 Central de Exportação de Relatórios Executivos em PDF")
     st.markdown("Gere relatórios institucionais completos com sumário executivo, KPIs de patrimônio e tabela de composição auditada.")
     
-    tipo_relatorio = st.radio("Escolha o Modelo de Relatório:", ["Relatório Cadastral & Carteira de Fundo", "Auditoria de Detentores por Título Público"])
+    tipo_relatorio = st.radio("Escolha o Modelo de Relatório:", ["Relatório Cadastral & Carteira de Fundo", "Visão Consolidada de Conglomerado", "Auditoria de Detentores por Título Público"])
     
     if tipo_relatorio == "Relatório Cadastral & Carteira de Fundo":
         fundo_pdf_sel = st.selectbox("Fundo para Exportar:", list(opcoes_fundo.keys()), key="pdf_fundo")
@@ -754,6 +938,19 @@ with tab5:
                     label="⬇️ Baixar Relatório em PDF",
                     data=pdf_bytes,
                     file_name=f"relatorio_cvm_{cnpj_pdf}_{comp_selecionada}.pdf",
+                    mime="application/pdf"
+                )
+    elif tipo_relatorio == "Visão Consolidada de Conglomerado":
+        conglom_pdf_sel = st.selectbox("Conglomerado para Exportar:", lista_conglom_tab, key="pdf_conglom")
+        dados_conglom_pdf = df_all[(df_all["CONGLOMERADO"] == conglom_pdf_sel) & (df_all["DT_COMPTC"] == comp_selecionada)]
+        
+        if st.button("Gerar Relatório em PDF do Conglomerado", type="primary"):
+            with st.spinner("Gerando relatório consolidado em PDF..."):
+                pdf_bytes = gerar_relatorio_pdf_conglomerado(dados_conglom_pdf, conglom_pdf_sel, comp_selecionada)
+                st.download_button(
+                    label="⬇️ Baixar Relatório do Conglomerado em PDF",
+                    data=pdf_bytes,
+                    file_name=f"consolidado_{conglom_pdf_sel.lower().replace(' ', '_')}_{comp_selecionada}.pdf",
                     mime="application/pdf"
                 )
     else:
