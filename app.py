@@ -69,7 +69,7 @@ st.markdown("""
 # ------------------------------------------------------------------------------
 @st.cache_data(show_spinner="Carregando e indexando histórico de 12 meses da CVM...")
 def carregar_dados():
-    caminho_parquet = "dados_cvm/carteira_consolidada.parquet"
+    caminho_parquet = "carteira_consolidada.parquet"
     if os.path.exists(caminho_parquet):
         df = pd.read_parquet(caminho_parquet)
     else:
