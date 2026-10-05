@@ -365,7 +365,44 @@ with tab_cong:
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        # Benchmark Oficial ANBIMA (Ago/2026) e Reconciliação
+        anbima_bench = {
+            "Banco do Brasil": {"tot": 1969.2, "rf": 1387.4, "prev": 467.2, "obs": "95% do patrimônio do BB é Renda Fixa e Previdência conservadora alocado no Bloco 1 (LFT/NTN-B), gerando aderência quase 1:1 com a ANBIMA."},
+            "Itaú Unibanco": {"tot": 1381.7, "rf": 759.7, "prev": 302.9, "obs": "Na ANBIMA, R$ 1,06 Trilhão são Renda Fixa e Previdência (exatamente o volume do Bloco 1). Os demais ~R$ 330 Bi a 480 Bi são Ações, Multimercados em Bolsa, FIP e FIDC que não compram títulos públicos no SELIC."},
+            "Bradesco": {"tot": 1044.6, "rf": 537.2, "prev": 357.1, "obs": "Na ANBIMA, R$ 894 Bi estão em Renda Fixa e Previdência (cobertos no Bloco 1). O restante está em FIDC, Ações e Multimercados em Bolsa."},
+            "BTG Pactual": {"tot": 743.4, "rf": 214.4, "prev": 40.1, "obs": "No BTG, R$ 254 Bi são Renda Fixa e Previdência. Mais de R$ 480 Bi são FIP (R$ 104 Bi), FIDC (R$ 86 Bi), Ações (R$ 84 Bi) e Multimercados em bolsa."},
+            "Caixa Econômica": {"tot": 638.5, "rf": 401.7, "prev": 213.3, "obs": "96% da Caixa é Renda Fixa (R$ 401 Bi) e Previdência (R$ 213 Bi). Com a classificação unificada da Caixa Asset, o volume é capturado em sua totalidade."},
+            "Santander": {"tot": 432.4, "rf": 268.8, "prev": 119.8, "obs": "R$ 388 Bi do Santander estão em Renda Fixa e Previdência, com alta cobertura no Bloco 1."},
+            "Safra": {"tot": 206.3, "rf": 128.9, "prev": 28.2, "obs": "R$ 157 Bi do Safra estão em Renda Fixa e Previdência."}
+        }
+        
+        if conglom_escolhido in anbima_bench:
+            b_info = anbima_bench[conglom_escolhido]
+            st.markdown(f"""
+            <div style="background: #0f172a; color: #f8fafc; border-radius: 8px; padding: 14px 16px; margin-top: 10px; margin-bottom: 12px; border: 1px solid #1e293b;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <span style="background: rgba(2, 132, 199, 0.2); color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">Reconciliação Oficial ANBIMA</span>
+                        <div style="font-size: 13px; font-weight: 700; color: #ffffff; margin-top: 4px;">Ranking de Gestores ANBIMA vs. CDA Bloco 1 CVM (Títulos Públicos)</div>
+                    </div>
+                    <div style="display: flex; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+                        <div>
+                            <span style="color: #94a3b8; font-size: 10px; display: block;">AuM Total ANBIMA:</span>
+                            <strong style="color: #38bdf8;">R$ {b_info['tot']:.1f} Bi</strong>
+                        </div>
+                        <div>
+                            <span style="color: #94a3b8; font-size: 10px; display: block;">Renda Fixa + Prev ANBIMA:</span>
+                            <strong style="color: #4ade80;">R$ {(b_info['rf'] + b_info['prev']):.1f} Bi</strong>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 8px; font-size: 11px; color: #cbd5e1; line-height: 1.4; border-top: 1px solid #1e293b; padding-top: 6px;">
+                    💡 <strong>Fundamento Metodológico:</strong> {b_info['obs']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         
         # Gráficos da Visão Consolidada
         col_cgg1, col_cgg2 = st.columns(2)

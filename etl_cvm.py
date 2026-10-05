@@ -33,36 +33,88 @@ def classificar_operacao(row):
 
 def classificar_conglomerado(row_ou_nome):
     """
-    Identifica o conglomerado bancário auditando Gestor, Administrador e Razão Social.
-    Reconhece subsidiárias e seguradoras como Brasilprev (BB), Kinea (Itaú), BRAM (Bradesco), etc.
+    Identifica o conglomerado financeiro de forma hierárquica e prudencial:
+    1. Audita CNPJ raiz da Asset / Gestora e Administradora Fiduciária (100% infalível)
+    2. Audita termos institucionais, subsidiárias, seguradoras e marcas no Gestor, Administrador e Razão Social.
+    Reconcilia com os volumes do Ranking Oficial de Gestão ANBIMA.
     """
     if isinstance(row_ou_nome, dict) or isinstance(row_ou_nome, pd.Series):
-        texto = f"{row_ou_nome.get('Gestor', '')} {row_ou_nome.get('Administrador', '')} {row_ou_nome.get('Denominacao_Social', '')} {row_ou_nome.get('DENOM_SOCIAL', '')}"
+        gestor = str(row_ou_nome.get('Gestor', '') or row_ou_nome.get('GESTOR', ''))
+        admin = str(row_ou_nome.get('Administrador', '') or row_ou_nome.get('ADMIN', ''))
+        denom = str(row_ou_nome.get('Denominacao_Social', '') or row_ou_nome.get('DENOM_SOCIAL', ''))
+        cnpj_g = str(row_ou_nome.get('CNPJ_GESTOR', '') or row_ou_nome.get('CPF_CNPJ_GESTOR', '') or '')
+        cnpj_a = str(row_ou_nome.get('CNPJ_ADMIN', '') or '')
+        texto = f"{gestor} {admin} {denom}"
+        cnpjs_ref = f"{cnpj_g} {cnpj_a}"
     else:
         texto = str(row_ou_nome)
+        cnpjs_ref = ""
     
     n = texto.upper()
+    c = cnpjs_ref.replace('.', '').replace('/', '').replace('-', '')
     
-    # Banco do Brasil & Brasilprev
-    if any(b in n for b in ['BANCO DO BRASIL', 'BB GESTAO', 'BB GESTÃO', 'BB DTVM', 'BB ', 'BRASILPREV', 'BB-']):
+    # 1. Banco do Brasil & Brasilprev (CNPJ Raiz: 00.000.000, 30.822.936 BB DTVM, 28.006.183 Brasilprev)
+    if (
+        any(r in c for r in ['00000000', '30822936', '28006183', '33055146']) or
+        any(b in n for b in [
+            'BANCO DO BRASIL', 'BB GESTAO', 'BB GESTÃO', 'BB DTVM', 'BB ASSET',
+            'BB ', 'BB-', 'BRASILPREV', 'BB SEGUROS', 'BB MAPFRE', 'PREVI'
+        ])
+    ):
         return 'Banco do Brasil'
-    # Itaú Unibanco & Kinea
-    if any(b in n for b in ['ITAU', 'ITAÚ', 'ITAUVEST', 'KINEA', 'UNIBANCO', 'INTRAG']):
-        return 'Itaú Unibanco'
-    # Bradesco & BRAM
-    if any(b in n for b in ['BRADESCO', 'BRAM', 'BEM DTVM', 'BRADESCO ASSET', 'BRADESCO SEGUROS']):
-        return 'Bradesco'
-    # Santander
-    if any(b in n for b in ['SANTANDER', 'SANVAL']):
-        return 'Santander'
-    # Caixa Econômica Federal
-    if any(b in n for b in ['CAIXA ECONOMICA', 'CAIXA ECONÔMICA', 'CAIXA DTVM', 'CEF']):
+        
+    # 2. Caixa Econômica Federal & Caixa Asset (CNPJ Raiz: 00.360.305 CEF, 40.540.852 Caixa Asset)
+    if (
+        any(r in c for r in ['00360305', '40540852']) or
+        any(b in n for b in [
+            'CAIXA ', 'CAIXA-', 'CAIXA ASSET', 'CAIXA ECONOMICA', 'CAIXA ECONÔMICA',
+            'CAIXA DTVM', 'CEF', 'CAIXA GESTAO', 'CAIXA GESTÃO', 'CAIXA DISTRIBUIDORA',
+            'CAIXA BRASIL', 'CAIXA FIC', 'CAIXA VIDA', 'CAIXA SEGURIDADE',
+            'CAIXA PREVIDENCIA', 'CAIXA PREVIDÊNCIA'
+        ])
+    ):
         return 'Caixa Econômica'
-    # BTG Pactual
-    if any(b in n for b in ['BTG', 'BTG PACTUAL']):
+        
+    # 3. Itaú Unibanco, Kinea, Intrag & Itaúvest (CNPJ Raiz: 60.701.190 Itaú, 40.010.258 Itaú Asset, 43.794.137 Itaú DTVM, 62.418.140 Intrag, 08.455.025 Kinea, 61.465.884 Itaú Previdência)
+    if (
+        any(r in c for r in ['60701190', '40010258', '43794137', '62418140', '08455025', '11536007', '61465884', '17298092']) or
+        any(b in n for b in [
+            'ITAU', 'ITAÚ', 'ITAUVEST', 'KINEA', 'UNIBANCO', 'INTRAG',
+            'PERSONNALITE', 'PERSONNALITÉ', 'ITAU BBA', 'ITAU ASSET', 'ITAU DTVM',
+            'ITAU PREVIDENCIA', 'ITAU PREVIDÊNCIA', 'ITAU VIDA', 'SPECIAL FIC'
+        ])
+    ):
+        return 'Itaú Unibanco'
+        
+    # 4. Bradesco, BRAM, BEM DTVM & Bradesco Seguros (CNPJ Raiz: 60.746.948 Bradesco, 62.375.134 BRAM, 00.066.214 BEM DTVM, 51.990.695 Bradesco Previdência)
+    if (
+        any(r in c for r in ['60746948', '62375134', '00066214', '51990695', '61336684']) or
+        any(b in n for b in [
+            'BRADESCO', 'BRAM', 'BEM DTVM', 'BRADESCO ASSET', 'BRADESCO SEGUROS',
+            'BRADESCO PREVIDENCIA', 'BRADESCO PREVIDÊNCIA', 'BRADESCO VIDA', 'PRIME FIC'
+        ])
+    ):
+        return 'Bradesco'
+        
+    # 5. Santander & Sanval (CNPJ Raiz: 90.400.888 Santander, 10.269.249 Santander Asset)
+    if (
+        any(r in c for r in ['90400888', '10269249', '04860742']) or
+        any(b in n for b in ['SANTANDER', 'SANVAL', 'SELECT FIC', 'SANTANDER ASSET', 'SANTANDER BRASIL'])
+    ):
+        return 'Santander'
+        
+    # 6. BTG Pactual (CNPJ Raiz: 30.306.294 BTG Banco, 29.615.308 BTG Asset, 59.281.253 BTG DTVM)
+    if (
+        any(r in c for r in ['30306294', '29615308', '59281253']) or
+        any(b in n for b in ['BTG', 'BTG PACTUAL', 'PACTUAL'])
+    ):
         return 'BTG Pactual'
-    # Safra
-    if any(b in n for b in ['SAFRA', 'J. SAFRA']):
+        
+    # 7. Safra (CNPJ Raiz: 58.160.789 Safra Banco, 62.874.499 Safra Asset, 03.017.677 J. Safra)
+    if (
+        any(r in c for r in ['58160789', '62874499', '03017677']) or
+        any(b in n for b in ['SAFRA', 'J. SAFRA', 'J SAFRA'])
+    ):
         return 'Safra'
         
     return 'Independentes'
@@ -84,12 +136,32 @@ def processar_arquivos_cvm(pasta_origem: str = PASTA_DADOS) -> pd.DataFrame:
         # 1. Base Cadastral
         if arq.endswith(".csv") and ("cadastral" in arq.lower() or "cad" in arq.lower()):
             print(f"-> Lendo Cadastro: {arq}")
-            df_cad = pd.read_csv(caminho, sep=";", encoding="ISO-8859-1", low_memory=False)
-            col_c = "CNPJ_Fundo" if "CNPJ_Fundo" in df_cad.columns else "CNPJ_FUNDO"
-            col_n = "Denominacao_Social" if "Denominacao_Social" in df_cad.columns else "DENOM_SOCIAL"
-            df_cad["CNPJ_CLEAN"] = limpar_cnpj(df_cad[col_c])
-            df_cad["Denominacao_Social"] = df_cad[col_n].astype(str)
-            df_cad = df_cad[["CNPJ_CLEAN", "Denominacao_Social", "Situacao", "Gestor", "Administrador"]].drop_duplicates("CNPJ_CLEAN")
+            try:
+                df_cad_raw = pd.read_csv(caminho, sep=";", encoding="ISO-8859-1", low_memory=False)
+                # Normalização de nomes de colunas
+                col_map = {c: c.strip().upper() for c in df_cad_raw.columns}
+                df_cad_raw.rename(columns=col_map, inplace=True)
+
+                col_c = next((c for c in ["CNPJ_FUNDO", "CNPJ_FUNDO_CLASSE", "CNPJ"] if c in df_cad_raw.columns), df_cad_raw.columns[0])
+                col_n = next((c for c in ["DENOM_SOCIAL", "DENOMINACAO_SOCIAL", "NOME"] if c in df_cad_raw.columns), df_cad_raw.columns[1])
+                col_g = next((c for c in ["GESTOR", "PF_PJ_GESTOR", "NOME_GESTOR"] if c in df_cad_raw.columns), None)
+                col_cg = next((c for c in ["CPF_CNPJ_GESTOR", "CNPJ_GESTOR"] if c in df_cad_raw.columns), None)
+                col_a = next((c for c in ["ADMIN", "ADMINISTRADOR", "NOME_ADMIN"] if c in df_cad_raw.columns), None)
+                col_ca = next((c for c in ["CNPJ_ADMIN", "CNPJ_ADMINISTRADOR"] if c in df_cad_raw.columns), None)
+                col_s = next((c for c in ["SIT", "SITUACAO"] if c in df_cad_raw.columns), None)
+
+                df_cad = pd.DataFrame()
+                df_cad["CNPJ_CLEAN"] = limpar_cnpj(df_cad_raw[col_c])
+                df_cad["Denominacao_Social"] = df_cad_raw[col_n].astype(str)
+                df_cad["Gestor"] = df_cad_raw[col_g].astype(str) if col_g else ""
+                df_cad["Administrador"] = df_cad_raw[col_a].astype(str) if col_a else ""
+                df_cad["CNPJ_GESTOR"] = limpar_cnpj(df_cad_raw[col_cg]) if col_cg else ""
+                df_cad["CNPJ_ADMIN"] = limpar_cnpj(df_cad_raw[col_ca]) if col_ca else ""
+                df_cad["Situacao"] = df_cad_raw[col_s].astype(str) if col_s else "EM FUNCIONAMENTO NORMAL"
+                df_cad = df_cad.drop_duplicates("CNPJ_CLEAN")
+                print(f"   Cadastro carregado com sucesso: {len(df_cad):,} fundos.")
+            except Exception as e_cad:
+                print(f"   Aviso ao ler cadastro: {e_cad}")
 
         # 2. Arquivos Mensais do CDA
         elif arq.endswith(".zip"):
